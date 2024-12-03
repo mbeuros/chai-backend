@@ -138,8 +138,8 @@ const logoutUser = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set: {
-                refreshToken: undefined
+            $unset: {
+                refreshToken: 1 // this removes the field from document
             }
         },
         {
@@ -167,7 +167,14 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         }
 
         const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
-        const user = await User.findById(decodedToken?._id)
+        const { email, username } = req.body
+
+        const user = await User.findOne(
+            {
+                $or: [{ username }, { email }]
+            }
+        )
+        console.log("decodedToken\n", decodedToken, "User:\n", user);
 
         if (!user) {
             throw new ApiError(401, "Invalid Refresh Token")
@@ -197,6 +204,8 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body
 
     const user = await User.findById(req.user?._id)
+    console.log("user:--", user);
+
     const isPasswordCorrect = user.isPasswordCorrect(oldPassword)
 
     if (!isPasswordCorrect) {
@@ -213,7 +222,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 const getCurrentUser = asyncHandler(async (req, res) => {
     return res
         .status(200)
-        .json(200, req.user, "Current user fetched successfully")
+        .json(new ApiResponse(200, req.user, "Current user fetched successfully"))
 })
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
@@ -224,6 +233,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     }
 
     const user = await User.findByIdAndUpdate(req.user?._id,
+
         {
             $set: {
                 fullName,
@@ -238,6 +248,14 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     return res
         .status(200)
         .json(new ApiResponse(200, user, "Account details updated successfully"))
+})
+
+const deleteAccount = asyncHandler(async (req, res) => {
+    await User.findByIdAndDelete(req.user?._id)
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Account deleted successfully"))
 })
 
 const updateUserAvatar = asyncHandler(async (req, res) => {
@@ -312,7 +330,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                     $size: "$subscribers"
                 },
                 channelsSubscribedToCount: {
-                    $size: "#subscribedTo"
+                    $size: "$subscribedTo"
                 },
                 isSubscribed: {
                     $cond: {
@@ -332,8 +350,8 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 email: 1,
                 subscribersCount: 1,
                 channelsSubscribedToCount: 1,
-                isSubscribed,
-                avatar,
+                isSubscribed: 1,
+                avatar: 1,
                 coverImage: 1,
                 coverImage: 1,
             }
@@ -378,20 +396,23 @@ const getWatchHistory = asyncHandler(async (req, res) => {
                                         avatar: 1
                                     }
                                 },
-                                {
-                                    $addFields: {
-                                        owner: {
-                                            $first: "$owner"
-                                        }
-                                    }
-                                }
                             ]
+                        }
+                    },
+                    {
+                        $addFields: {
+                            owner: {
+                                $first: "$owner"
+                            }
                         }
                     }
                 ]
             }
         }
     ])
+
+    console.log('req.user._id', req.user._id);
+
 
     return res
         .status(200)
@@ -402,4 +423,4 @@ const getWatchHistory = asyncHandler(async (req, res) => {
         )
 })
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken, changeCurrentPassword, getCurrentUser, updateAccountDetails, updateUserAvatar, updateUserCoverImage, getUserChannelProfile, getWatchHistory }
+export { registerUser, loginUser, logoutUser, refreshAccessToken, changeCurrentPassword, getCurrentUser, deleteAccount, updateAccountDetails, updateUserAvatar, updateUserCoverImage, getUserChannelProfile, getWatchHistory }
